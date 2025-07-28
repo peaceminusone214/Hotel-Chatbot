@@ -1,32 +1,74 @@
-const Hotel = require('../models/Hotel');
-const Room = require('../models/Room');
-const { getGPTReply } = require('../services/gptService');
+const Hotel = require("../models/Hotel");
+const Room = require("../models/Room");
+const { getGPTReply } = require("../services/gptService");
+const {
+  getContextSummary,
+  updateContextSummary,
+} = require("../services/chatContextService");
 
 exports.handleMessage = async (req, res) => {
   try {
-    const { message, sender_id, platform, page_id } = req.body;
+    const { hotelCode, platform, page_id, sender_id, message } = req.body;
 
-    // 1. Xác định khách sạn từ page_id / zalo_oa_id
-    const hotel = await Hotel.findOne(platform === 'facebook'
-      ? { fb_page_id: page_id }
-      : { zalo_oa_id: page_id }
-    );
+    if (!hotelCode || !platform || !page_id || !sender_id || !message) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
 
-    if (!hotel) return res.status(404).json({ message: 'Khách sạn không tồn tại' });
+    const hotel = await Hotel.findOne({ hotelCode });
+    if (!hotel) {
+      return res.status(404).json({ error: "Hotel not found" });
+    }
 
-    // 2. Lấy danh sách phòng
-    const rooms = await Room.find({ hotelCode: hotel.hotelCode });
+    const rooms = await Room.find({ hotelCode });
 
-    // 3. Gửi prompt đến GPT
-    const reply = await getGPTReply(hotel, rooms, message);
+    const contextSummary = await getContextSummary({ platform, page_id, sender_id });
 
-    // 4. Trả lại kết quả (chỗ này bạn sẽ gửi lại FB/Zalo thực tế sau)
-    return res.json({
+    const reply = await getGPTReply(hotel, rooms, message, contextSummary);
+
+    await updateContextSummary({
+      hotelCode,
+      platform,
+      page_id,
+      sender_id,
+      message,
       reply,
-      hotel: hotel.name,
     });
+
+    return res.json({ reply });
   } catch (err) {
-    console.error("chatbotController error:", err);
-    return res.status(500).json({ message: "Lỗi hệ thống" });
+    console.error("Error handling message:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// testMessage cho dùng thử (nếu thiếu platform/page_id vẫn chạy)
+exports.testMessage = async (req, res) => {
+  const { hotelCode, platform, page_id, sender_id, message } = req.body;
+
+  if (!hotelCode || !message) {
+    return res.status(400).json({ error: "Missing hotelCode or message" });
+  }
+
+  try {
+    const hotel = await Hotel.findOne({ hotelCode });
+    if (!hotel) return res.status(404).json({ error: "Hotel not found" });
+
+    const rooms = await Room.find({ hotelCode });
+
+    let contextSummary = "";
+    if (platform && page_id && sender_id) {
+      contextSummary = await getContextSummary({ platform, page_id, sender_id });
+    }
+
+    const reply = await getGPTReply(hotel, rooms, message, contextSummary);
+
+    if (platform && page_id && sender_id) {
+      await updateContextSummary({ hotelCode, platform, page_id, sender_id, message, reply });
+    }
+
+    return res.json({ reply });
+  } catch (err) {
+    console.error("Lỗi testMessage:", err);
+    return res.status(500).json({ error: "Lỗi server" });
   }
 };
