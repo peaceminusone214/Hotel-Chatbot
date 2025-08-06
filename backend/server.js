@@ -14,6 +14,8 @@ const webhookRoutes = require('./routes/webhook.route');
 app.use('/webhook', webhookRoutes);
 const chatbotRoutes = require("./routes/chatbot.route");
 app.use("/chatbot", chatbotRoutes);
+const zaloWebhook = require("./routes/zaloWebhook.route");
+app.use("/zalo/webhook", zaloWebhook);
 
 // Server
 const PORT = process.env.PORT || 3000;
