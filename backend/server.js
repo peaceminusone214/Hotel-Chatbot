@@ -1,9 +1,12 @@
 require('dotenv').config();
 const express = require('express');
+const path = require('path');
 const app = express();
 const mongoose = require('mongoose');
 
 app.use(express.json());
+// Serve file tĩnh cho xác minh Zalo
+app.use('/zalo', express.static(path.join(__dirname, 'public/zalo')));
 
 mongoose.connect(process.env.MONGO_URI)
 .then(() => console.log("Connected to MongoDB"))
